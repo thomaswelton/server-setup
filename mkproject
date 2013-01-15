@@ -1,0 +1,276 @@
+#! /bin/bash
+
+function promptyn {
+  while true; do
+		read -p "$1 " yn
+		case $yn in
+			[Yy]* ) return 0;;
+			[Nn]* ) return 1;;
+			* ) echo -e "Please answer yes or no.";;
+		esac
+	done
+}
+
+function log_make_vhost
+{
+	echo -e "\nCreating virtual host $1"
+	echo -e "The config file can be found here /etc/apache2/sites-available/$1 \n"
+}
+
+function make_vhost
+{
+	# Make htdocs folder if it does not exist
+	if [ ! -d "/home/$1/htdocs/" ]; then
+    	# Control will enter here if $DIRECTORY doesn't exist.
+    	mkdir /home/$1/htdocs/
+	fi
+
+cat <<- _EOF_
+	<VirtualHost *:80>
+		ServerAdmin thomaswelton@me.com
+
+		ServerName $1.clicktag.co.uk
+		ServerAlias *.$1.clicktag.co.uk
+		DocumentRoot /home/$1/htdocs
+		<Directory />
+				Options FollowSymLinks
+				AllowOverride None
+		</Directory>
+		<Directory /home/$1/htdocs>
+				Options FollowSymLinks MultiViews
+				AllowOverride All
+				Order allow,deny
+				allow from all
+		</Directory>
+
+		ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/
+		<Directory "/usr/lib/cgi-bin">
+				AllowOverride None
+				Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch
+				Order allow,deny
+				Allow from all
+		</Directory>
+
+		ErrorLog ${APACHE_LOG_DIR}/error.log
+
+		# Possible values include: debug, info, notice, warn, error, crit,
+		# alert, emerg.
+		LogLevel warn
+
+		CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+		Alias /doc/ "/usr/share/doc/"
+		<Directory "/usr/share/doc/">
+			Options Indexes MultiViews FollowSymLinks
+			AllowOverride None
+			Order deny,allow
+			Deny from all
+			Allow from 127.0.0.0/255.0.0.0 ::1/128
+		</Directory>
+
+	</VirtualHost>
+_EOF_
+}
+
+function make_vhost_ssl
+{
+
+cat <<- _EOF_
+	<IfModule mod_ssl.c>
+	<VirtualHost *:443>
+		ServerAdmin thomaswelton@me.com
+
+		ServerName $1.clicktag.co.uk
+		ServerAlias www.$1.clicktag.co.uk
+		DocumentRoot /home/$1/htdocs/
+
+		<Directory />
+				Options FollowSymLinks
+				AllowOverride None
+		</Directory>
+		<Directory /home/$1/htdocs/>
+				Options FollowSymLinks MultiViews
+				AllowOverride All
+				Order allow,deny
+				allow from all
+		</Directory>
+
+		ScriptAlias /cgi-bin/ /usr/lib/cgi-bin/
+		<Directory "/usr/lib/cgi-bin">
+				AllowOverride None
+				Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch
+				Order allow,deny
+				Allow from all
+		</Directory>
+
+		ErrorLog ${APACHE_LOG_DIR}/error.log
+
+		LogLevel warn
+
+		CustomLog ${APACHE_LOG_DIR}/ssl_access.log combined
+
+		Alias /doc/ "/usr/share/doc/"
+		<Directory "/usr/share/doc/">
+				Options Indexes MultiViews FollowSymLinks
+				AllowOverride None
+				Order deny,allow
+				Deny from all
+				Allow from 127.0.0.0/255.0.0.0 ::1/128
+		</Directory>
+
+		SSLEngine on
+
+		SSLCACertificateFile /etc/apache2/ssl/certs/gs_root_ca.crt
+		SSLCertificateFile /etc/apache2/ssl/certs/star_clicktag_co_uk.crt
+		SSLCertificateKeyFile /etc/apache2/ssl/private/star_clicktag_co_uk.key
+
+
+
+		<FilesMatch "\.(cgi|shtml|phtml|php)$">
+				SSLOptions +StdEnvVars
+		</FilesMatch>
+		<Directory /usr/lib/cgi-bin>
+				SSLOptions +StdEnvVars
+		</Directory>
+
+		BrowserMatch "MSIE [2-6]" \
+				nokeepalive ssl-unclean-shutdown \
+				downgrade-1.0 force-response-1.0
+		# MSIE 7 and newer should be able to use keepalive
+		BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
+
+	</VirtualHost>
+	</IfModule>
+_EOF_
+}
+
+function make_ftp
+{
+  echo -e "Creating new user account $1\n"
+  useradd $1 -m
+
+  echo -e "Choose a password for the new user $1"
+  passwd $1
+
+  usermod -g www-data $1
+  chown -hR $1:www-data /home/$1
+  chmod -R g+w /home/$1
+
+  echo -e "\n"
+}
+
+clear
+
+read -d '' Logo <<"EOF"
+Click Cloud Setup
+
+         -hMm/`      ``                ``          ```````        `::::`   
+       :hMMMMMm+`   .MM/              -Nm-        /MMNNNNMmy:   -yMNmmNMdo 
+    `/dMMMMMMMMMm+  .MM/             :NMMN-       /MM:...-hMN`  mMd-  .+mh`
+  `/dMMMMMMMMMMNs.  .MM/            :NMyhMN-      /MM.    +MM`  dMm-`   `  
+`+mMMMMMMMMMMmo.    .MM/           -mMy``yMd-     /MM+::+yNNo   `omNd+.    
+sMMMMMMMMMMMm-      .MM/          -mMd.``.dMm-    /MMmdddmNNy/    .ohNNh:` 
+ -yNMMMMMMMMMmo.    .MM/         :mMMNmmmmNMMm:   /MM-````-yMM+      -yNMd.
+   -yNMMMMMMMMMNs.  .MM/        :NMy::::::::hMN-  /MM.      hMN.-`     -MMh
+     .sNMMMMMMMMh-  .MM/       :NMy`        `yMm- /MM.   .-yMM+hNd:   `/MMs
+       `oNMMMMy-    .MMNmmmmmmmmMs`          `yMm-/MMmmmmNMNh: `ymMmyhNMNo`
+         `+my.      `:::::::::::-             `::-`::::::-``     `::oo:-`  
+
+Created By 	: Thomas Welton
+Email 		: thomaswelton@me.com
+EOF
+
+VHOSTS=()
+
+echo -e "$Logo"
+echo -e "\n\nWelcome to the click cloud virtual host setup script."
+echo -e "\n\n"
+echo -e "FTP accounts and virtual host configuration files will be created based upon the information you provide here"
+echo -e "To get started enter a project name, this usually derived from the URL for the project name.clicktag.co.uk\n\n"
+
+echo -n "Project Name: "
+read pname
+
+domain="$pname.clicktag.co.uk"
+
+echo -e "Setting up project $pname..."
+
+# Add the FTP user account
+make_ftp $pname
+
+log_make_vhost $pname 
+make_vhost $pname > /etc/apache2/sites-available/$pname
+VHOSTS=("${VHOSTS[@]}" $pname)
+DFILES=("${DFILES[@]}" $pname)
+
+
+if promptyn "SSL Support required? $domain (y/n)"; then
+	log_make_vhost "$pname-ssl"
+	make_vhost_ssl "$pname-ssl" > "/etc/apache2/sites-available/$pname-ssl"
+	VHOSTS=("${VHOSTS[@]}" "$pname-ssl")
+fi
+
+
+# Create development enviroments
+if promptyn "Do you need to create devlopment enviroments for this project? (y/n)"; then
+	moreHosts=true
+	while [ "$moreHosts" = true ]; do
+		echo -e "\nDevelopment enviroments will be setup in the form of env.$pname.clicktag.co.uk"
+		echo -e "Please enter the enviroment name you wish to create or leave blank to continue: "
+		echo -n "Enviroment name:"
+		read envname
+
+		if [ "$envname" != "" ]; then
+			homedir="$pname$envname"
+			make_ftp $homedir
+
+			log_make_vhost $homedir
+			make_vhost $homedir > /etc/apache2/sites-available/$homedir
+			VHOSTS=("${VHOSTS[@]}" $homedir)
+			DFILES=("${DFILES[@]}" $homedir)
+		else
+			moreHosts=false
+		fi
+	done
+
+	echo -e "\n"
+fi
+
+# Enable the array of created VHOSTS
+a2ensite ${VHOSTS[@]}
+
+if promptyn "You you like to reload apache now? (y/n)"; then
+	service apache2 reload
+fi
+
+
+echo -e "\n"
+if promptyn "Clone project from github? (y/n)"; then
+	echo -n "Enter the github SSH url git@github.com:clickTag/repo.git :"
+	read githubUrl
+
+	echo -e "\n"
+
+	if [ "$githubUrl" != "" ]; then
+		deployments=()
+		for host in "${DFILES[@]}"
+		do
+			if promptyn "Deploy to $host? (y/n):"; then
+				deployments=("${deployments[@]}" "$host")
+			fi
+		done
+
+		echo -e "\n"
+
+		if [ ${#deployments[@]} > 0 ]; then
+			echo -e "\nDeploying code to ${deployments[@]}\n"
+			for deployment in ${deployments[@]}
+			do
+				chown -R $deployment:$deployment /home/$deployment/htdocs
+				git clone $githubUrl /home/$deployment/htdocs
+			done
+		fi
+	else
+		echo -e "No URL entered\n"
+	fi
+fi
